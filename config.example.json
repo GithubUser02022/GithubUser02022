@@ -1,0 +1,102 @@
+{
+  "app_name": "课堂助手套件",
+  "autostart": false,
+  "notify": false,
+  "start_minimized": true,
+  "sync": {
+    "enable": false,
+    "dest": "",
+    "subfolder_mode": "none",
+    "interval": 5,
+    "min_size_kb": 0,
+    "exists_policy": "rename",
+    "skip_if_exists": true,
+    "log_duplicate_skip": false,
+    "copy_siblings": false,
+    "copy_siblings_recursive": false,
+    "siblings_use_subfolder": true,
+    "siblings_max_files": 200,
+    "siblings_max_size_mb": 200,
+    "enable_ppt": false,
+    "ppt_mode": "slideshow",
+    "enable_doc": false,
+    "enable_pdf": false,
+    "deep_scan": false,
+    "enable_usb": false,
+    "usb_interval": 60,
+    "usb_max_files": 3000,
+    "usb_max_size_mb": 200,
+    "usb_max_depth": 8,
+    "usb_subfolder": "label"
+  },
+  "usb_export": {
+    "enable": false,
+    "trigger_file": "f",
+    "require_hidden": true,
+    "trigger_value": "1",
+    "dest_subfolder": "课件",
+    "interval": 10,
+    "max_files": 5000,
+    "max_size_mb": 500,
+    "max_total_mb": 0,
+    "overwrite": false,
+    "once_per_insert": true,
+    "no_trigger_file_no_log": false
+  },
+  "launch": {
+    "enable": false,
+    "interval": 1.0,
+    "show_desktop_after": false,
+    "restore_focus": true,
+    "items": []
+  },
+  "watch": {
+    "enable": false,
+    "check_interval": 3.0,
+    "restart_delay": 30.0,
+    "items": []
+  },
+  "assoc": {
+    "enable": false,
+    "apply_on_start": false,
+    "delay": 8.0,
+    "items": []
+  },
+  "tasks": {
+    "enable": false,
+    "check_interval": 20.0,
+    "shutdown_warn": 60.0,
+    "enable_wake": false,
+    "items": []
+  },
+  "protect": {
+    "enable": false,
+    "target": "",
+    "args": "",
+    "workdir": "",
+    "attach": true,
+    "restart_delay": 2.0,
+    "max_restart": 0,
+    "mutual": false,
+    "ignore_ctrl": true
+  },
+  "zy": {
+    "enable": false,
+    "log_path": "C:\\Program Files\\Ezy\\中育课堂助手\\logs\\Log.txt",
+    "app_dir": "C:\\Program Files\\Ezy\\中育课堂助手",
+    "app_exe": "CloudRoom.Main.exe",
+    "refresh_interval": 5,
+    "show_overlay": false,
+    "auto_start_zy": false
+  },
+  "_说明": "这是字段说明用的示例，程序不读这个文件。真正生效的是同目录下的 config.json（首次运行自动生成）。",
+  "shell": {
+    "hue": 205.0,
+    "depth": 0.0,
+    "sat": 0.0,
+    "radius": 18.0,
+    "style": "auto",
+    "ui_scale": 0.0,
+    "backdrop": "mica"
+  }
+}
