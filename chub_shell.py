@@ -30,12 +30,14 @@ Mica 云母背景。不自绘，所以不会有错位和死循环。
 from __future__ import annotations
 
 import os
+import re
 import tkinter as tk
 from tkinter import ttk
 
 import chub_core as core
 import chub_ui as chw_mod
-from chub_core import (APP_AUTHOR, APP_ID, APP_NAME_CN, APP_RELEASE_DATE,
+from chub_core import (APP_AUTHOR, APP_CONTRIBUTORS, APP_ID, APP_NAME_CN,
+                       APP_RELEASE_DATE,
                        APP_VERSION, CFG, LOG_PATH, AppItem, AssocItem,
                        TaskItem, log)
 
@@ -43,6 +45,40 @@ from chub_core import (APP_AUTHOR, APP_ID, APP_NAME_CN, APP_RELEASE_DATE,
 # ==============================================================================
 # 一、配色
 # ==============================================================================
+def _parse_color(text: str):
+    """解析颜色字符串，支持 #RRGGBB / #RGB / rgb(r,g,b) / 颜色名。
+    解析不了返回 None。"""
+    if not text:
+        return None
+    t = str(text).strip()
+    try:
+        if t.startswith("#"):
+            h = t[1:]
+            if len(h) == 3:
+                h = "".join(c * 2 for c in h)
+            if len(h) == 6:
+                return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+            return None
+        m = re.match(r"^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)", t, re.I)
+        if m:
+            return tuple(int(m.group(i)) for i in (1, 2, 3))
+    except Exception:
+        return None
+    # 常见颜色名
+    names = {
+        "white": (255, 255, 255), "black": (0, 0, 0),
+        "gray": (128, 128, 128), "grey": (128, 128, 128),
+        "red": (255, 0, 0), "green": (0, 128, 0), "blue": (0, 0, 255),
+        "yellow": (255, 255, 0), "cyan": (0, 255, 255),
+        "magenta": (255, 0, 255), "orange": (255, 165, 0),
+        "purple": (128, 0, 128), "pink": (255, 192, 203),
+        "darkblue": (0, 0, 139), "lightblue": (173, 216, 230),
+        "navy": (0, 0, 128), "teal": (0, 128, 128),
+        "silver": (192, 192, 192), "gold": (255, 215, 0),
+    }
+    return names.get(t.lower())
+
+
 def _hsv(h, s, v):
     import colorsys
 
@@ -84,6 +120,25 @@ def build_palette(dark: bool = False) -> dict:
         bg, card, card_hi = (245, 247, 250), (255, 255, 255), (240, 245, 252)
         title_bg = _hsv(hue, max(0.10, min(1.0, 0.55 * sat_k)), 0.98)
         text, sub, line = (32, 34, 40), (110, 118, 130), (222, 228, 236)
+
+    # 自定义页面背景 / 文字色（留空 = 用上面的默认）
+    custom_bg = str(CFG.get("shell.page_bg", "") or "").strip()
+    custom_fg = str(CFG.get("shell.page_fg", "") or "").strip()
+    if custom_bg:
+        got = _parse_color(custom_bg)
+        if got:
+            bg = got
+            # 卡片颜色跟着背景走：比背景稍亮（深色模式）或稍白（浅色模式）
+            lum = _lum(bg)
+            card = _mix(bg, (255, 255, 255), 0.10 if lum < 128 else 0.55)
+            card_hi = _mix(bg, (255, 255, 255), 0.18 if lum < 128 else 0.75)
+            line = _mix(bg, (255, 255, 255) if lum < 128 else (0, 0, 0), 0.22)
+            title_bg = _mix(bg, _hsv(hue, 0.55, 0.9), 0.85)
+    if custom_fg:
+        got = _parse_color(custom_fg)
+        if got:
+            text = got
+            sub = _mix(got, bg, 0.42)
 
     return {
         "dark": dark, "hue": hue, "accent": accent, "accent_hi": accent_hi,
@@ -640,6 +695,9 @@ MODULES = [
     ("云笔助手面板", "⑦", "仿云笔助手的连接界面", [
         ("check", "pen.enable", "启用云笔面板"),
     ]),
+    ("计时器", "⑧", "正计时 / 倒计时，精确到秒", [
+        ("check", "clock.enable", "启用计时器浮窗"),
+    ]),
 ]
 
 SYNC_CARDS = [
@@ -776,6 +834,30 @@ PEN_CARDS = [
     ]),
 ]
 
+CLOCK_CARDS = [
+    ("计时器", "正计时 / 倒计时，精确到秒", [
+        ("check", "clock.enable", "启用计时器浮窗"),
+        ("combo", "clock.mode", "模式", ["stopwatch", "countdown"]),
+        ("check", "clock.show_seconds", "精确到秒"),
+        ("check", "clock.topmost", "浮窗置顶"),
+        ("btn", "重新开始计时", "clock_restart"),
+    ]),
+    ("倒计时设置", "countdown 模式用", [
+        ("entry", "clock.countdown_seconds", "时长（秒）", "float"),
+        ("entry", "clock.countdown_target", "或指定时刻（18:30）", "text"),
+        ("combo", "clock.on_zero", "归零时", ["none", "message", "shutdown", "lock"]),
+        ("check", "clock.auto_restart", "归零后自动重新开始"),
+        ("note", "指定时刻填了就优先用它；留空用上面的时长。"),
+    ]),
+    ("外观", "", [
+        ("entry", "clock.font_size", "字号", "int"),
+        ("entry", "clock.opacity", "不透明度 0.3~1.0", "float"),
+        ("entry", "clock.bg", "背景色", "text"),
+        ("entry", "clock.fg", "文字色", "text"),
+        ("note", "浮窗可以拖动，位置会自动记下来。"),
+    ]),
+]
+
 LOG_CARDS = [
     ("日志", "排查问题第一步就是看它", [
         ("btn", "打开日志文件", "open_log"),
@@ -788,21 +870,35 @@ LOG_CARDS = [
 
 MENU_PAGES = {
     "首选项": {
+        # 常规页特殊：不画框框，直接 7 个复选框平铺（见 _render_prefs）
         "常规": [("m%d" % i, t, d, opts) for i, (t, g, d, opts) in enumerate(MODULES)],
         "课件同步": [("s%d" % i, t, d, opts) for i, (t, d, opts) in enumerate(SYNC_CARDS)],
-        "开机启动 & 守护": [("b%d" % i, t, d, opts) for i, (t, d, opts) in enumerate(BOOT_CARDS)],
+        # 开机启动&守护 + 定时任务 + 程序守护器 合并
+        "启动与守护": (
+            [("b%d" % i, t, d, opts) for i, (t, d, opts) in enumerate(BOOT_CARDS)]
+            + [("t%d" % i, t, d, opts) for i, (t, d, opts) in enumerate(TASK_CARDS)]
+            + [("p%d" % i, t, d, opts) for i, (t, d, opts) in enumerate(PROTECT_CARDS)]
+        ),
         "文件关联": [("a%d" % i, t, d, opts) for i, (t, d, opts) in enumerate(ASSOC_CARDS)],
-        "定时任务": [("t%d" % i, t, d, opts) for i, (t, d, opts) in enumerate(TASK_CARDS)],
-        "程序守护器": [("p%d" % i, t, d, opts) for i, (t, d, opts) in enumerate(PROTECT_CARDS)],
-        "中育助手": [("z%d" % i, t, d, opts) for i, (t, d, opts) in enumerate(ZY_CARDS)],
-        "云笔面板": [("n%d" % i, t, d, opts) for i, (t, d, opts) in enumerate(PEN_CARDS)],
-        "日志": [("l%d" % i, t, d, opts) for i, (t, d, opts) in enumerate(LOG_CARDS)],
+        # 中育助手 + 云笔面板 合并
+        "中育 & 云笔": (
+            [("z%d" % i, t, d, opts) for i, (t, d, opts) in enumerate(ZY_CARDS)]
+            + [("n%d" % i, t, d, opts) for i, (t, d, opts) in enumerate(PEN_CARDS)]
+        ),
+        "计时器": [("k%d" % i, t, d, opts) for i, (t, d, opts) in enumerate(CLOCK_CARDS)],
     },
-    "个性化": {"外观": []},
-    "帮助": {"怎么用": []},
-    "关于": {"ClassHub": []},
+    "个性化": {
+        "颜色": [],
+        "缩放": [],
+        "其它": [],
+    },
+    "帮助": {
+        "怎么用": [],
+        "源码": [],
+        "日志": [],
+        "关于 ClassHub": [],
+    },
 }
-
 
 # ==============================================================================
 # 五、列表编辑器（启动项 / 守护项 / 关联 / 任务）
@@ -1141,6 +1237,23 @@ HELP_PAGES = [
         "",
         "想正常退出：先在托盘菜单里关掉这个开关。",
     ]),
+    ("计时器", [
+        "新模块：一个独立小浮窗，显示正计时或倒计时，精确到秒。",
+        "",
+        "模式：",
+        "  stopwatch 正计时 —— 从 00:00:00 往上走",
+        "  countdown 倒计时 —— 从设定时长往下走",
+        "",
+        "倒计时可填：",
+        "  时长（秒）—— 比如 3600 = 一小时",
+        "  或指定时刻 —— 比如 18:30（填了优先用这个）",
+        "",
+        "归零时可选：什么都不做 / 弹提示 / 关机 / 锁屏",
+        "还可以勾「归零后自动重新开始」，做成循环计时。",
+        "",
+        "浮窗可以拖动位置，位置会自动记下来。",
+        "默认关闭，勾上才显示。",
+    ]),
     ("排查与常见问题", [
         "图标出来了但没拷到东西：",
         "  立即检查一次 → 打开日志，看有没有「已复制」。",
@@ -1260,7 +1373,12 @@ class ShellWindow:
 
     # ------------------------------------------------------------ 菜单栏
     def _build_menubar(self, root):
-        """任务管理器「文件 / 选项 / 查看」那一排：首选项、个性化、帮助、关于"""
+        """任务管理器「文件 / 选项 / 查看」那一排。
+
+        按钮从 MENU_PAGES 动态取，不再写死 —— 之前写死成
+        ("首选项","个性化","帮助","关于")，把「关于」并进帮助后按钮没跟着删，
+        留了个点了没反应的死按钮。
+        """
         pal = self.pal
         s = self.scale
         bar = tk.Frame(root, bg=_hex(pal["bg"]), height=int(36 * s))
@@ -1268,7 +1386,7 @@ class ShellWindow:
         bar.pack_propagate(False)
         self.menubar = bar
         self.menu_btns = {}
-        for name in ("首选项", "个性化", "帮助", "关于"):
+        for name in MENU_PAGES.keys():
             b = tk.Label(bar, text=name, bg=_hex(pal["bg"]), fg=_hex(pal["text"]),
                          padx=int(14 * s), pady=int(6 * s),
                          font=("Microsoft YaHei UI", 10))
@@ -1382,13 +1500,70 @@ class ShellWindow:
         self.grid.bind("<Configure>", on_frame)
         self.canvas.bind("<Configure>", on_frame)
 
-        # 滚轮（Windows / Linux 都能滚）
-        self.canvas.bind("<MouseWheel>", self._on_wheel)
-        self.canvas.bind("<Button-4>", self._on_wheel)
-        self.canvas.bind("<Button-5>", self._on_wheel)
+        # 滚轮：绑在 canvas 上的话，鼠标停在卡片/复选框/输入框等子控件上时
+        # 事件不会冒泡到 canvas，就滚不动（只能拖进度条）。改成全局绑定，
+        # 再判断鼠标是不是落在主区域里 —— 是才滚，否则让控件自己处理。
+        self._wheel_binds = []
+        for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self.root.bind_all(seq, self._on_wheel)
+            self._wheel_binds.append(seq)
+
+    def _unbind_wheel(self):
+        """窗口销毁前解绑，避免重复绑定越滚越快"""
+        for seq in getattr(self, "_wheel_binds", []):
+            try:
+                self.root.unbind_all(seq)
+            except Exception:
+                pass
+        self._wheel_binds = []
+
+    def _is_over_main(self, e) -> bool:
+        """鼠标是否落在主区域（canvas 或其任一子孙）上"""
+        try:
+            w = self.root.winfo_containing(e.x_root, e.y_root)
+        except Exception:
+            return False
+        if w is None:
+            return False
+        cur = w
+        for _ in range(64):                 # 防死循环
+            try:
+                if cur is self.canvas or str(cur) == str(self.canvas):
+                    return True
+            except Exception:
+                return False
+            # 往上走一层：优先用 .master，退回 winfo_parent + nametowidget
+            nxt = None
+            try:
+                nxt = getattr(cur, "master", None)
+            except Exception:
+                nxt = None
+            if nxt is None:
+                try:
+                    parent = cur.winfo_parent()
+                    if parent:
+                        nxt = self.root.nametowidget(parent)
+                except Exception:
+                    nxt = None
+            if nxt is None:
+                return False
+            cur = nxt
+        return False
 
     def _on_wheel(self, e):
         try:
+            if not self._is_over_main(e):
+                return                      # 不在主区域，交给控件自己滚
+            widget = None
+            try:
+                widget = self.root.winfo_containing(e.x_root, e.y_root)
+            except Exception:
+                pass
+            # 自己能滚的控件（源码页的 Text、列表框）让它自己滚，别抢
+            if widget is not None:
+                cls = widget.winfo_class()
+                if cls in ("Text", "Listbox", "Treeview", "Entry", "Spinbox"):
+                    return
             if getattr(e, "delta", 0):
                 self.canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
             elif getattr(e, "num", 0) == 4:
@@ -1419,8 +1594,6 @@ class ShellWindow:
             self._render_personal()
         elif self.menu == "帮助":
             self._render_help()
-        elif self.menu == "关于":
-            self._render_about()
         else:
             self._render_prefs(cols)
 
@@ -1441,11 +1614,52 @@ class ShellWindow:
     def _render_prefs(self, cols):
         """框框数量 <= 1 时不再画框框，直接平铺。
 
-        「文件关联」「中育助手」「日志」这几个选项卡本来就只有一个区块，
-        套一层框反而空 —— 跟 关于/帮助/个性化 一样平铺即可。
+        「常规」页更进一步：7 个模块各只有一个总开关，
+        不画框框也没有折叠箭头，就是 7 行复选框（带编号和说明）。
         """
         s = self.scale
         cards = MENU_PAGES[self.menu][self.tab]
+
+        # ---- 常规页：7 行复选框，直接平铺 ----
+        if self.menu == "首选项" and self.tab == "常规":
+            holder = tk.Frame(self.grid, bg=_hex(self.pal["bg"]))
+            holder._base_bg = "bg"
+            holder.grid(row=0, column=0, sticky="ew",
+                        padx=int(10 * s), pady=int(8 * s))
+            self._ctl_widgets.append(holder)
+            hd = tk.Frame(holder, bg=_hex(self.pal["bg"]))
+            hd._base_bg = "bg"
+            hd.pack(fill="x", padx=int(12 * s), pady=(int(10 * s), int(6 * s)))
+            tk.Label(hd, text="功能模块总开关", bg=_hex(self.pal["bg"]),
+                     fg=_hex(self.pal["text"]),
+                     font=("Microsoft YaHei UI", 13, "bold")).pack(side="left")
+            tk.Label(hd, text="默认全部关闭", bg=_hex(self.pal["bg"]),
+                     fg=_hex(self.pal["sub"]),
+                     font=("Microsoft YaHei UI", 8)).pack(side="right")
+            self._ctl_widgets.append(hd)
+            for title, glyph, desc, opts in MODULES:
+                row = tk.Frame(holder, bg=_hex(self.pal["bg"]))
+                row._base_bg = "bg"
+                row.pack(fill="x", padx=int(12 * s), pady=int(2 * s))
+                self._ctl_widgets.append(row)
+                tk.Label(row, text=glyph, width=3, anchor="w",
+                         bg=_hex(self.pal["bg"]), fg=_hex(self.pal["accent"]),
+                         font=("Microsoft YaHei UI", 11, "bold")).pack(side="left")
+                for spec in opts:
+                    if spec[0] == "check":
+                        v = tk.BooleanVar(value=bool(CFG.get(spec[1], False)))
+                        ck = RoundCheck(row, text=spec[2], variable=v,
+                                        palette=self.pal, size=int(22 * s),
+                                        base="bg")
+                        ck.pack(anchor="w")
+                        self.bindings.append((spec[1], "bool", v))
+                        self._ctl_widgets.append(ck)
+                if desc:
+                    tk.Label(row, text=desc, bg=_hex(self.pal["bg"]),
+                             fg=_hex(self.pal["sub"]),
+                             font=("Microsoft YaHei UI", 8)).pack(
+                        anchor="w", padx=int(30 * s))
+            return
 
         if len(cards) <= 1:
             for _, title, desc, opts in cards:
@@ -1626,6 +1840,9 @@ class ShellWindow:
                 elif name == "export_usb":
                     if app:
                         app.on_export_usb(True)
+                elif name == "clock_restart":
+                    if app:
+                        app.on_clock_restart()
                 elif name == "shutdown60":
                     self._power("shutdown", 60)
                 elif name == "shutdown":
@@ -1673,18 +1890,10 @@ class ShellWindow:
 
     # ------------------------------------------------------------ 个性化
     def _render_personal(self):
+        """个性化拆成三个子选项卡：颜色 / 缩放 / 其它"""
         s = self.scale
         pal = self.pal
         body = self._plain_container()
-        head = tk.Frame(body, bg=_hex(pal["bg"]))
-        head._base_bg = "bg"
-        head.pack(fill="x", padx=int(12 * s), pady=(int(10 * s), int(4 * s)))
-        tk.Label(head, text="个性化", bg=_hex(pal["bg"]), fg=_hex(pal["text"]),
-                 font=("Microsoft YaHei UI", 13, "bold")).pack(side="left")
-        tk.Label(head, text="只影响设置窗口的内容区", bg=_hex(pal["bg"]),
-                 fg=_hex(pal["sub"]),
-                 font=("Microsoft YaHei UI", 8)).pack(side="right")
-        self._ctl_widgets.append(head)
 
         self.v_hue = tk.DoubleVar(value=float(CFG.get("shell.hue", 205.0)))
         self.v_depth = tk.DoubleVar(value=float(CFG.get("shell.depth", 0.0)))
@@ -1692,105 +1901,195 @@ class ShellWindow:
         self.v_radius = tk.DoubleVar(value=float(CFG.get("shell.radius", 18.0)))
         self.v_style = tk.StringVar(value=str(CFG.get("shell.style", "auto")))
         self.v_backdrop = tk.StringVar(value=str(CFG.get("shell.backdrop", "mica")))
+        self.v_scale = tk.DoubleVar(value=float(CFG.get("shell.ui_scale", 0.0)))
+        self.v_page_bg = tk.StringVar(value=str(CFG.get("shell.page_bg", "") or ""))
+        self.v_page_fg = tk.StringVar(value=str(CFG.get("shell.page_fg", "") or ""))
 
-        def slider(label, var, lo, hi, hint=""):
+        self._section_head(body, "个性化",
+                           {"颜色": "强调色、深浅、饱和度",
+                            "缩放": "界面缩放，大屏友好",
+                            "其它": "明暗、背景材质、自定义背景色"}.get(self.tab, ""))
+
+        def head(text, sub=""):
             f = tk.Frame(body, bg=_hex(pal["bg"]))
+            f._base_bg = "bg"
+            f.pack(fill="x", padx=int(12 * s), pady=(int(8 * s), int(4 * s)))
+            tk.Label(f, text=text, bg=_hex(pal["bg"]), fg=_hex(pal["text"]),
+                     font=("Microsoft YaHei UI", 11, "bold")).pack(side="left")
+            if sub:
+                tk.Label(f, text=sub, bg=_hex(pal["bg"]), fg=_hex(pal["sub"]),
+                         font=("Microsoft YaHei UI", 8)).pack(side="right")
+            self._ctl_widgets.append(f)
+            return f
+
+        def slider(label, var, lo, hi, hint="", step=1, cmd=None):
+            f = tk.Frame(body, bg=_hex(pal["bg"]))
+            f._base_bg = "bg"
             f.pack(fill="x", padx=int(12 * s), pady=int(3 * s))
             tk.Label(f, text=label, width=10, anchor="w", bg=_hex(pal["bg"]),
                      fg=_hex(pal["text"]),
                      font=("Microsoft YaHei UI", 9)).pack(side="left")
             tk.Scale(f, from_=lo, to=hi, orient="horizontal", variable=var,
-                     length=int(260 * s), resolution=1, showvalue=True,
-                     command=lambda *_: self.on_theme_change()).pack(side="left")
+                     length=int(260 * s), resolution=step, showvalue=True,
+                     command=cmd or (lambda *_: self.on_theme_change())).pack(
+                side="left")
             if hint:
                 tk.Label(f, text=hint, fg=_hex(pal["sub"]), bg=_hex(pal["bg"]),
                          font=("Microsoft YaHei UI", 8)).pack(side="left")
             self._ctl_widgets.append(f)
+            return f
 
-        # ---- 界面缩放（大屏友好）----
-        scf = tk.Frame(body, bg=_hex(pal["bg"]))
-        scf.pack(fill="x", padx=int(12 * s), pady=int(3 * s))
-        scf._base_bg = "bg"
-        tk.Label(scf, text="界面缩放", width=10, anchor="w", bg=_hex(pal["bg"]),
-                 fg=_hex(pal["text"]),
-                 font=("Microsoft YaHei UI", 9)).pack(side="left")
-        self.v_scale = tk.DoubleVar(value=float(CFG.get("shell.ui_scale", 0.0)))
-        sc = tk.Scale(scf, from_=0.0, to=3.0, orient="horizontal",
-                      variable=self.v_scale, length=int(240 * s),
-                      resolution=0.1, showvalue=True,
-                      command=lambda *_: self._update_scale_hint())
-        sc.pack(side="left")
-        self.scale_hint = tk.Label(scf, text="", bg=_hex(pal["bg"]),
-                                   fg=_hex(pal["sub"]),
-                                   font=("Microsoft YaHei UI", 8))
-        self.scale_hint.pack(side="left", padx=int(6 * s))
-        tk.Label(scf, text="0 = 自动", bg=_hex(pal["bg"]), fg=_hex(pal["sub"]),
-                 font=("Microsoft YaHei UI", 8)).pack(side="left")
-        self._ctl_widgets.append(scf)
-        self._update_scale_hint()
-
-        slider("强调色", self.v_hue, 188, 260, "←青 蓝 紫→")
-        slider("深浅", self.v_depth, -60, 60, "深 ←→ 浅")
-        slider("饱和度", self.v_sat, -40, 40, "灰 ←→ 艳")
-        slider("卡片圆角", self.v_radius, 0, 32, "0 = 直角")
-
-        stf = tk.Frame(body, bg=_hex(pal["bg"]))
-        stf.pack(fill="x", padx=int(12 * s), pady=int(4 * s))
-        tk.Label(stf, text="明暗", width=10, anchor="w", bg=_hex(pal["bg"]),
-                 fg=_hex(pal["text"]),
-                 font=("Microsoft YaHei UI", 9)).pack(side="left")
-        for label, val in (("跟随系统", "auto"), ("浅色", "light"), ("深色", "dark")):
-            tk.Radiobutton(stf, text=label, variable=self.v_style, value=val,
-                           bg=_hex(pal["bg"]), fg=_hex(pal["text"]),
-                           selectcolor=_hex(pal["card_hi"]),
-                           activebackground=_hex(pal["card"]),
-                           font=("Microsoft YaHei UI", 9),
-                           command=self.on_theme_change).pack(side="left",
-                                                              padx=int(6 * s))
-        self._ctl_widgets.append(stf)
-
-        # 背景材质（Mica 等）
-        bdf = tk.Frame(body, bg=_hex(pal["bg"]))
-        bdf.pack(fill="x", padx=int(12 * s), pady=int(4 * s))
-        tk.Label(bdf, text="背景材质", width=10, anchor="w", bg=_hex(pal["bg"]),
-                 fg=_hex(pal["text"]),
-                 font=("Microsoft YaHei UI", 9)).pack(side="left")
-        box = ttk.Combobox(bdf, textvariable=self.v_backdrop, state="readonly",
-                           width=14, style=self._combo_style(),
-                           values=["mica", "tabbed", "acrylic", "none", "auto"])
-        box.pack(side="left")
-        box.bind("<<ComboboxSelected>>", lambda e: self.on_theme_change())
-        tk.Label(bdf, text="mica=云母（任务管理器用的）   Win11 22H2+ 才有效",
-                 bg=_hex(pal["bg"]), fg=_hex(pal["sub"]),
-                 font=("Microsoft YaHei UI", 8)).pack(side="left",
-                                                               padx=int(8 * s))
-        self._ctl_widgets.append(bdf)
-
-        pf = tk.Frame(body, bg=_hex(pal["bg"]))
-        pf.pack(fill="x", padx=int(12 * s), pady=int(6 * s))
-        tk.Label(pf, text="预设", width=10, anchor="w", bg=_hex(pal["bg"]),
-                 fg=_hex(pal["text"]),
-                 font=("Microsoft YaHei UI", 9)).pack(side="left")
-        b_reset_scale = PillButton(pf, text="缩放自动", w=int(88 * s),
-                                   h=int(28 * s), palette=pal,
-                                   command=self.reset_scale)
-        b_reset_scale.configure(bg=_hex(pal["bg"]))
-        b_reset_scale.pack(side="left", padx=3)
-        self._ctl_widgets.append(b_reset_scale)
-        for name in PRESETS:
-            b = PillButton(pf, text=name, w=int(80 * s), h=int(28 * s),
-                           palette=pal, command=lambda n=name: self.preset(n))
+        def color_row(label, var, hint=""):
+            f = tk.Frame(body, bg=_hex(pal["bg"]))
+            f._base_bg = "bg"
+            f.pack(fill="x", padx=int(12 * s), pady=int(3 * s))
+            tk.Label(f, text=label, width=10, anchor="w", bg=_hex(pal["bg"]),
+                     fg=_hex(pal["text"]),
+                     font=("Microsoft YaHei UI", 9)).pack(side="left")
+            v = var
+            mk_entry(f, v, width=14, palette=pal, scale=s,
+                     fill=True)._border.pack(side="left", fill="x", expand=True,
+                                             padx=(int(8 * s), 0))
+            b = PillButton(f, text="预览", w=int(58 * s), h=int(24 * s),
+                           palette=pal, command=lambda: self.on_theme_change())
             b.configure(bg=_hex(pal["bg"]))
-            b.pack(side="left", padx=3)
+            b.pack(side="left", padx=int(5 * s))
             self._ctl_widgets.append(b)
+            if hint:
+                tk.Label(f, text=hint, bg=_hex(pal["bg"]), fg=_hex(pal["sub"]),
+                         font=("Microsoft YaHei UI", 8)).pack(side="left",
+                                                              padx=int(6 * s))
+            self._ctl_widgets.append(f)
+            return f
 
-        self.prev_c = tk.Canvas(body, height=int(54 * s), highlightthickness=0,
-                                bd=0, bg=_hex(pal["bg"]))
-        self.prev_c.pack(fill="x", padx=int(12 * s), pady=int(8 * s))
-        self._draw_preview()
+        # ================================ 颜色 ================================
+        if self.tab == "颜色":
+            head("强调色", "改的是按钮、选项卡、复选框")
+            slider("色相", self.v_hue, 188, 260, "← 青 蓝 紫 →")
+            slider("深浅", self.v_depth, -60, 60, "深 ←→ 浅")
+            slider("饱和度", self.v_sat, -40, 40, "灰 ←→ 艳")
+            slider("卡片圆角", self.v_radius, 0, 32, "0 = 直角")
 
+            pf = tk.Frame(body, bg=_hex(pal["bg"]))
+            pf._base_bg = "bg"
+            pf.pack(fill="x", padx=int(12 * s), pady=int(6 * s))
+            tk.Label(pf, text="预设", width=10, anchor="w", bg=_hex(pal["bg"]),
+                     fg=_hex(pal["text"]),
+                     font=("Microsoft YaHei UI", 9)).pack(side="left")
+            for name in PRESETS:
+                b = PillButton(pf, text=name, w=int(80 * s), h=int(28 * s),
+                               palette=pal, command=lambda n=name: self.preset(n))
+                b.configure(bg=_hex(pal["bg"]))
+                b.pack(side="left", padx=3)
+                self._ctl_widgets.append(b)
+
+            self.prev_c = tk.Canvas(body, height=int(54 * s),
+                                    highlightthickness=0, bd=0,
+                                    bg=_hex(pal["bg"]))
+            self.prev_c._base_bg = "bg"
+            self.prev_c.pack(fill="x", padx=int(12 * s), pady=int(8 * s))
+            self._draw_preview()
+
+        # ================================ 缩放 ================================
+        elif self.tab == "缩放":
+            head("界面缩放", "0 = 自动")
+
+            scf = tk.Frame(body, bg=_hex(pal["bg"]))
+            scf._base_bg = "bg"
+            scf.pack(fill="x", padx=int(12 * s), pady=int(3 * s))
+            tk.Label(scf, text="缩放系数", width=10, anchor="w",
+                     bg=_hex(pal["bg"]), fg=_hex(pal["text"]),
+                     font=("Microsoft YaHei UI", 9)).pack(side="left")
+            sc = tk.Scale(scf, from_=0.0, to=3.0, orient="horizontal",
+                          variable=self.v_scale, length=int(240 * s),
+                          resolution=0.1, showvalue=True,
+                          command=lambda *_: self._update_scale_hint())
+            sc.pack(side="left")
+            self.scale_hint = tk.Label(scf, text="", bg=_hex(pal["bg"]),
+                                       fg=_hex(pal["sub"]),
+                                       font=("Microsoft YaHei UI", 8))
+            self.scale_hint.pack(side="left", padx=int(6 * s))
+            self._ctl_widgets.append(scf)
+            self._update_scale_hint()
+
+            af = tk.Frame(body, bg=_hex(pal["bg"]))
+            af._base_bg = "bg"
+            af.pack(fill="x", padx=int(12 * s), pady=int(8 * s))
+            for txt, cmd, kd in (("应用缩放", self.apply_scale, "accent"),
+                                 ("缩放自动", self.reset_scale, "normal")):
+                b = PillButton(af, text=txt, w=int(96 * s), h=int(30 * s),
+                               kind=kd, palette=pal, command=cmd)
+                b.configure(bg=_hex(pal["bg"]))
+                b.pack(side="left", padx=4)
+                self._ctl_widgets.append(b)
+
+            for ln in ("改缩放会重建界面（约 0.3 秒），窗口尺寸也跟着变。",
+                       "自动算法：1920→1.0×  2560→1.39×  3440→1.96×  4K→2.22×"):
+                tk.Label(body, text=ln, bg=_hex(pal["bg"]), fg=_hex(pal["sub"]),
+                         justify="left", anchor="w", wraplength=int(420 * s),
+                         font=("Microsoft YaHei UI", 8)).pack(
+                    anchor="w", padx=int(13 * s), pady=int(2 * s))
+
+        # ================================ 其它 ================================
+        else:
+            head("明暗主题")
+            stf = tk.Frame(body, bg=_hex(pal["bg"]))
+            stf._base_bg = "bg"
+            stf.pack(fill="x", padx=int(12 * s), pady=int(4 * s))
+            tk.Label(stf, text="明暗", width=10, anchor="w",
+                     bg=_hex(pal["bg"]), fg=_hex(pal["text"]),
+                     font=("Microsoft YaHei UI", 9)).pack(side="left")
+            for label, val in (("跟随系统", "auto"), ("浅色", "light"),
+                               ("深色", "dark")):
+                tk.Radiobutton(stf, text=label, variable=self.v_style, value=val,
+                               bg=_hex(pal["bg"]), fg=_hex(pal["text"]),
+                               selectcolor=_hex(pal["card_hi"]),
+                               activebackground=_hex(pal["card"]),
+                               font=("Microsoft YaHei UI", 9),
+                               command=self.on_theme_change).pack(
+                    side="left", padx=int(6 * s))
+            self._ctl_widgets.append(stf)
+
+            head("背景材质")
+            bdf = tk.Frame(body, bg=_hex(pal["bg"]))
+            bdf._base_bg = "bg"
+            bdf.pack(fill="x", padx=int(12 * s), pady=int(4 * s))
+            tk.Label(bdf, text="材质", width=10, anchor="w",
+                     bg=_hex(pal["bg"]), fg=_hex(pal["text"]),
+                     font=("Microsoft YaHei UI", 9)).pack(side="left")
+            box = ttk.Combobox(bdf, textvariable=self.v_backdrop,
+                               state="readonly", width=14,
+                               style=self._combo_style(),
+                               values=["mica", "tabbed", "acrylic", "none",
+                                       "auto"])
+            box.pack(side="left")
+            box.bind("<<ComboboxSelected>>", lambda e: self.on_theme_change())
+            tk.Label(bdf, text="mica=云母（任务管理器用的），Win11 22H2+ 有效",
+                     bg=_hex(pal["bg"]), fg=_hex(pal["sub"]),
+                     font=("Microsoft YaHei UI", 8)).pack(side="left",
+                                                          padx=int(8 * s))
+            self._ctl_widgets.append(bdf)
+
+            head("自定义颜色", "留空 = 跟随明暗主题")
+            color_row("页面背景", self.v_page_bg, "如 #101014")
+            color_row("页面文字", self.v_page_fg, "如 #FFFFFF")
+
+            cf = tk.Frame(body, bg=_hex(pal["bg"]))
+            cf._base_bg = "bg"
+            cf.pack(fill="x", padx=int(12 * s), pady=int(6 * s))
+            for txt, cmd in (("常用深色", lambda: self._pick_bg("#101014", "#FFFFFF")),
+                             ("常用浅色", lambda: self._pick_bg("#F5F7FA", "#202228")),
+                             ("清空(跟随主题)", lambda: self._pick_bg("", ""))):
+                b = PillButton(cf, text=txt, w=int(104 * s), h=int(28 * s),
+                               palette=pal, command=cmd)
+                b.configure(bg=_hex(pal["bg"]))
+                b.pack(side="left", padx=3)
+                self._ctl_widgets.append(b)
+
+        # ---- 底部按钮 ----
         acts = tk.Frame(body, bg=_hex(pal["bg"]))
-        acts.pack(fill="x", padx=int(12 * s), pady=int(6 * s))
+        acts._base_bg = "bg"
+        acts.pack(fill="x", padx=int(12 * s), pady=int(10 * s))
         for txt, cmd, kd in (("应用并保存", self.apply_theme, "accent"),
                              ("恢复默认", self.reset_theme, "normal")):
             b = PillButton(acts, text=txt, w=int(110 * s), h=int(30 * s),
@@ -1799,13 +2098,33 @@ class ShellWindow:
             b.pack(side="left", padx=4)
             self._ctl_widgets.append(b)
 
-        note = tk.Label(body,
-                        text="窗口边框、标题栏、最小化/关闭按钮由 Windows 绘制（DWM），"
-                             "这里改的只是内容区的颜色和卡片圆角。",
-                        bg=_hex(pal["bg"]), fg=_hex(pal["sub"]), justify="left",
-                        anchor="w", wraplength=int(420 * s),
-                        font=("Microsoft YaHei UI", 8))
-        note.pack(anchor="w", padx=int(13 * s), pady=int(4 * s))
+        tk.Label(body,
+                 text="窗口边框、标题栏、最小化/关闭按钮由 Windows 绘制（DWM），"
+                      "这里改的只是内容区。",
+                 bg=_hex(pal["bg"]), fg=_hex(pal["sub"]), justify="left",
+                 anchor="w", wraplength=int(420 * s),
+                 font=("Microsoft YaHei UI", 8)).pack(
+            anchor="w", padx=int(13 * s), pady=int(4 * s))
+
+    def _section_head(self, body, title, sub=""):
+        s = self.scale
+        pal = self.pal
+        f = tk.Frame(body, bg=_hex(pal["bg"]))
+        f._base_bg = "bg"
+        f.pack(fill="x", padx=int(12 * s), pady=(int(10 * s), int(4 * s)))
+        tk.Label(f, text=title, bg=_hex(pal["bg"]), fg=_hex(pal["text"]),
+                 font=("Microsoft YaHei UI", 13, "bold")).pack(side="left")
+        if sub:
+            tk.Label(f, text=sub, bg=_hex(pal["bg"]), fg=_hex(pal["sub"]),
+                     font=("Microsoft YaHei UI", 8)).pack(side="right")
+        self._ctl_widgets.append(f)
+        return f
+
+    def _pick_bg(self, bg, fg):
+        """一键设置页面配色"""
+        self.v_page_bg.set(bg)
+        self.v_page_fg.set(fg)
+        self.on_theme_change()
 
     def _draw_preview(self):
         c = getattr(self, "prev_c", None)
@@ -1892,6 +2211,7 @@ class ShellWindow:
             pass
         # 拆掉四大块重建
         try:
+            self._unbind_wheel()
             for attr in ("menubar", "tabbar", "main_wrap", "status_bar"):
                 w = getattr(self, attr, None)
                 if w is not None:
@@ -1918,13 +2238,17 @@ class ShellWindow:
     def _write_theme(self):
         if hasattr(self, "v_scale"):
             CFG.set("shell.ui_scale", float(self.v_scale.get()))
-        CFG.set("shell.hue", float(self.v_hue.get()))
-        CFG.set("shell.depth", float(self.v_depth.get()))
-        CFG.set("shell.sat", float(self.v_sat.get()))
-        CFG.set("shell.radius", float(self.v_radius.get()))
-        CFG.set("shell.style", self.v_style.get())
+        if hasattr(self, "v_hue"):
+            CFG.set("shell.hue", float(self.v_hue.get()))
+            CFG.set("shell.depth", float(self.v_depth.get()))
+            CFG.set("shell.sat", float(self.v_sat.get()))
+            CFG.set("shell.radius", float(self.v_radius.get()))
+            CFG.set("shell.style", self.v_style.get())
         if hasattr(self, "v_backdrop"):
             CFG.set("shell.backdrop", self.v_backdrop.get())
+        if hasattr(self, "v_page_bg"):
+            CFG.set("shell.page_bg", str(self.v_page_bg.get()).strip())
+            CFG.set("shell.page_fg", str(self.v_page_fg.get()).strip())
 
     def refresh_palette(self):
         """换色：整套内容区跟着变（只重画已有部件，不重建）"""
@@ -1979,22 +2303,41 @@ class ShellWindow:
         for k, v in core.SHELL_THEME.items():
             CFG.set("shell." + k, v)
         CFG.set("shell.backdrop", "mica")
+        CFG.set("shell.page_bg", "")
+        CFG.set("shell.page_fg", "")
         self.v_hue.set(core.SHELL_THEME["hue"])
         self.v_depth.set(core.SHELL_THEME["depth"])
         self.v_sat.set(core.SHELL_THEME["sat"])
         self.v_radius.set(core.SHELL_THEME["radius"])
         self.v_style.set("auto")
         self.v_backdrop.set("mica")
+        if hasattr(self, "v_page_bg"):
+            self.v_page_bg.set("")
+            self.v_page_fg.set("")
         self.on_theme_change()
 
     # ------------------------------------------------------------ 帮助
     def _render_help(self):
+        """帮助拆成四个子选项卡：怎么用 / 源码 / 日志 / 关于 ClassHub"""
+        if self.tab == "源码":
+            self._render_source()
+        elif self.tab == "日志":
+            self._render_log()
+        elif self.tab == "关于 ClassHub":
+            self._render_about()
+        else:
+            self._render_usage()
+
+    # ------------------------------------------------------------ 怎么用
+    def _render_usage(self):
         s = self.scale
         pal = self.pal
         self.help_idx = getattr(self, "help_idx", 0)
         body = self._plain_container()
+        self._section_head(body, "怎么用", "共 %d 页" % len(HELP_PAGES))
 
         head = tk.Frame(body, bg=_hex(pal["bg"]))
+        head._base_bg = "bg"
         head.pack(fill="x", padx=int(12 * s), pady=(int(10 * s), int(6 * s)))
         self.help_var = tk.StringVar()
         titles = [t for t, _ in HELP_PAGES]
@@ -2007,12 +2350,15 @@ class ShellWindow:
                                  fg=_hex(pal["sub"]),
                                  font=("Microsoft YaHei UI", 9))
         self.help_lbl.pack(side="right")
+        self._ctl_widgets.append(head)
 
         self.help_c = tk.Canvas(body, height=int(300 * s), highlightthickness=0,
                                 bd=0, bg=_hex(pal["bg"]))
+        self.help_c._base_bg = "bg"
         self.help_c.pack(fill="x", padx=int(12 * s))
 
         foot = tk.Frame(body, bg=_hex(pal["bg"]))
+        foot._base_bg = "bg"
         foot.pack(fill="x", padx=int(12 * s), pady=int(8 * s))
         self.help_prev = PillButton(foot, text="← 上一页", w=int(96 * s),
                                     h=int(30 * s), palette=pal,
@@ -2022,6 +2368,7 @@ class ShellWindow:
                                     command=lambda: self.help_goto(1))
         for b in (self.help_prev, self.help_next):
             b.configure(bg=_hex(pal["bg"]))
+            b._base_bg = "bg"
             b.pack(side="left", padx=4)
         self._ctl_widgets.extend([self.help_prev, self.help_next])
         self._help_render()
@@ -2072,6 +2419,186 @@ class ShellWindow:
         self.help_prev.set_enabled(self.help_idx > 0)
         self.help_next.set_enabled(self.help_idx < len(HELP_PAGES) - 1)
 
+    # ------------------------------------------------------------ 源码
+    def _render_source(self):
+        """源码浏览：左边文件列表，右边看代码，带行号"""
+        s = self.scale
+        pal = self.pal
+        body = self._plain_container()
+        root = self._source_root()
+        self._section_head(body, "源码",
+                           ("目录：" + root) if root else "（没找到源码）")
+
+        files = self._source_files()
+        if not files:
+            for ln in ("没找到源码文件。",
+                       "打包成 EXE 后源码不在程序边上 —— 请用 ",
+                       "3_打包成EXE.bat 重新打包，它会自动把 .py 复制到 ",
+                       "dist 目录下的「源码」文件夹里。",
+                       "",
+                       "当前程序目录：" + str(core.BASE)):
+                tk.Label(body, text=ln, bg=_hex(pal["bg"]),
+                         fg=_hex(pal["sub"]), justify="left", anchor="w",
+                         wraplength=int(460 * s),
+                         font=("Microsoft YaHei UI", 9)).pack(
+                    anchor="w", padx=int(13 * s), pady=int(1 * s))
+            b = PillButton(body, text="打开程序文件夹", w=int(130 * s),
+                           h=int(30 * s), palette=pal,
+                           command=lambda: core.open_in_explorer(core.BASE))
+            b.configure(bg=_hex(pal["bg"]))
+            b.pack(anchor="w", padx=int(13 * s), pady=int(8 * s))
+            self._ctl_widgets.append(b)
+            return
+
+        top = tk.Frame(body, bg=_hex(pal["bg"]))
+        top._base_bg = "bg"
+        top.pack(fill="x", padx=int(12 * s), pady=int(4 * s))
+        self.src_var = tk.StringVar(value=files[0])
+        box = ttk.Combobox(top, textvariable=self.src_var, state="readonly",
+                           values=files, width=22, style=self._combo_style())
+        box.pack(side="left")
+        box.bind("<<ComboboxSelected>>", lambda e: self._src_show())
+        b_open = PillButton(top, text="用记事本打开", w=int(112 * s),
+                            h=int(26 * s), palette=pal,
+                            command=self._src_open)
+        b_open.configure(bg=_hex(pal["bg"]))
+        b_open.pack(side="left", padx=int(6 * s))
+        b_dir = PillButton(top, text="打开文件夹", w=int(96 * s), h=int(26 * s),
+                           palette=pal, command=lambda: core.open_in_explorer(
+                               root or core.BASE))
+        b_dir.configure(bg=_hex(pal["bg"]))
+        b_dir.pack(side="left", padx=3)
+        self._ctl_widgets.extend([top, b_open, b_dir])
+
+        boxf = tk.Frame(body, bg=_hex(pal["line"]))
+        boxf.pack(fill="both", expand=True, padx=int(12 * s), pady=int(6 * s))
+        self.src_txt = tk.Text(boxf, wrap="none", height=22,
+                               bg=_hex(pal["card_hi"]), fg=_hex(pal["text"]),
+                               insertbackground=_hex(pal["text"]),
+                               selectbackground=_hex(pal["accent"]),
+                               selectforeground=_hex(pal["on_accent"]),
+                               relief="flat", bd=0, highlightthickness=0,
+                               font=("Consolas", 10))
+        self.src_txt.pack(side="left", fill="both", expand=True, padx=1, pady=1)
+        sbv = ttk.Scrollbar(boxf, orient="vertical",
+                            command=self.src_txt.yview,
+                            style=style_scrollbar(pal))
+        sbv.pack(side="right", fill="y")
+        self.src_txt.configure(yscrollcommand=sbv.set)
+        # 只读：只是看，不在这儿改
+        self.src_txt.configure(state="disabled")
+        self._src_show()
+
+        tk.Label(body,
+                 text="提示：这里只能看不能改。要改请用记事本打开，"
+                      "改完重启程序生效。",
+                 bg=_hex(pal["bg"]), fg=_hex(pal["sub"]), justify="left",
+                 anchor="w", wraplength=int(420 * s),
+                 font=("Microsoft YaHei UI", 8)).pack(
+            anchor="w", padx=int(13 * s), pady=int(4 * s))
+
+    # 源码可能在这些地方找：
+    #   源码运行时  ->  BASE（就是 .py 所在目录）
+    #   打包成 EXE  ->  BASE\源码\ 或 BASE\internal\（打包脚本复制过去的）
+    SRC_SUBDIRS = ("源码", "internal", "src", "source")
+
+    def _source_root(self):
+        """找到真正放源码的目录，找不到返回 None"""
+        for d in (core.BASE,) + tuple(
+                os.path.join(core.BASE, sub) for sub in self.SRC_SUBDIRS):
+            try:
+                if os.path.isdir(d) and any(
+                        f.endswith(".py") and not f.startswith("_")
+                        for f in os.listdir(d)):
+                    return d
+            except Exception:
+                continue
+        return None
+
+    def _source_files(self):
+        """列出源码目录里的 .py 文件。跳过下划线开头的（测试脚本之类）。"""
+        root = self._source_root()
+        if not root:
+            return []
+        try:
+            names = [f for f in os.listdir(root)
+                     if f.endswith(".py") and not f.startswith("_")
+                     and os.path.isfile(os.path.join(root, f))]
+            return sorted(names)
+        except Exception:
+            return []
+
+    def _src_path(self):
+        """当前选中文件的完整路径"""
+        root = self._source_root() or core.BASE
+        return os.path.join(root, str(self.src_var.get()))
+
+    def _src_show(self):
+        try:
+            path = self._src_path()
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                raw = f.read()
+        except Exception as e:
+            raw = "（读取失败：%s）" % e
+        try:
+            self.src_txt.configure(state="normal")
+            self.src_txt.delete("1.0", "end")
+            for i, line in enumerate(raw.split("\n"), 1):
+                self.src_txt.insert("end", "%5d  %s\n" % (i, line))
+            self.src_txt.configure(state="disabled")
+            self.src_txt.yview_moveto(0)
+        except Exception:
+            pass
+
+    def _src_open(self):
+        try:
+            path = self._src_path()
+            import subprocess
+
+            subprocess.Popen(["notepad.exe", path])
+        except Exception:
+            try:
+                core.open_in_explorer(core.BASE)
+            except Exception:
+                pass
+
+    # ------------------------------------------------------------ 日志
+    def _render_log(self):
+        s = self.scale
+        pal = self.pal
+        body = self._plain_container()
+        self._section_head(body, "日志", "排查问题第一步就是看它")
+
+        tail = ""
+        try:
+            with open(LOG_PATH, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+            tail = "".join(lines[-200:])
+        except Exception as e:
+            tail = "（读不到日志：%s）" % e
+
+        boxf = tk.Frame(body, bg=_hex(pal["line"]))
+        boxf.pack(fill="both", expand=True, padx=int(12 * s), pady=int(6 * s))
+        txt = tk.Text(boxf, wrap="none", height=18,
+                      bg=_hex(pal["card_hi"]), fg=_hex(pal["text"]),
+                      insertbackground=_hex(pal["text"]),
+                      relief="flat", bd=0, highlightthickness=0,
+                      font=("Consolas", 9))
+        txt.pack(side="left", fill="both", expand=True, padx=1, pady=1)
+        sbv = ttk.Scrollbar(boxf, orient="vertical", command=txt.yview,
+                            style=style_scrollbar(pal))
+        sbv.pack(side="right", fill="y")
+        txt.configure(yscrollcommand=sbv.set)
+        txt.insert("1.0", tail)
+        txt.configure(state="disabled")
+        try:
+            txt.yview_moveto(1)
+        except Exception:
+            pass
+
+        for title, desc, opts in LOG_CARDS:
+            self._fill_into(body, opts, base_key="bg")
+
     # ------------------------------------------------------------ 关于
     def _render_about(self):
         s = self.scale
@@ -2085,18 +2612,22 @@ class ShellWindow:
         self._about_head_c = head
         self.root.after_idle(lambda: self._about_head(head))
 
-        for k, v in (("版本", "%s（build %s）" % (APP_VERSION,
-                                                 APP_RELEASE_DATE.replace("-", ""))),
-                     ("发布日期", APP_RELEASE_DATE),
-                     ("作者", APP_AUTHOR),
-                     ("程序标识", APP_ID)):
+        rows = [("版本", "%s（build %s）" % (APP_VERSION,
+                                            APP_RELEASE_DATE.replace("-", ""))),
+                ("发布日期", APP_RELEASE_DATE),
+                ("作者", APP_AUTHOR),
+                ("程序标识", APP_ID),
+                ("贡献者", "、".join(APP_CONTRIBUTORS))]
+        for k, v in rows:
             row = tk.Frame(body, bg=_hex(pal["bg"]))
+            row._base_bg = "bg"
             row.pack(fill="x", padx=int(12 * s), pady=int(2 * s))
             tk.Label(row, text=k, width=10, anchor="w", bg=_hex(pal["bg"]),
                      fg=_hex(pal["sub"]),
                      font=("Microsoft YaHei UI", 9)).pack(side="left")
             tk.Label(row, text=v, anchor="w", bg=_hex(pal["bg"]),
-                     fg=_hex(pal["text"]),
+                     fg=_hex(pal["text"]), wraplength=int(400 * s),
+                     justify="left",
                      font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
             self._ctl_widgets.append(row)
 
@@ -2105,7 +2636,8 @@ class ShellWindow:
         tk.Label(body,
                  text="Copyright (c) %s  %s.\n保留所有权利。\n\n"
                       "本程序只在本机运行，不联网、不上传、不外发任何数据。\n"
-                      "源码可直接查阅，功能默认全部关闭，由使用者自行决定是否开启。"
+                      "源码可直接查阅（见「源码」子页），功能默认全部关闭，"
+                      "由使用者自行决定是否开启。"
                       % (APP_RELEASE_DATE[:4], APP_AUTHOR),
                  bg=_hex(pal["bg"]), fg=_hex(pal["sub"]), justify="left",
                  anchor="w", font=("Microsoft YaHei UI", 9)).pack(
@@ -2196,6 +2728,10 @@ class ShellWindow:
         self.close()
 
     def close(self):
+        try:
+            self._unbind_wheel()
+        except Exception:
+            pass
         try:
             self.root.destroy()
         except Exception:

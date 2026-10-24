@@ -97,6 +97,23 @@
     "radius": 18.0,
     "style": "auto",
     "ui_scale": 0.0,
+    "page_bg": "",
+    "page_fg": "",
     "backdrop": "mica"
+  },
+  "clock": {
+    "enable": false,
+    "mode": "stopwatch",
+    "show_seconds": true,
+    "countdown_seconds": 3600.0,
+    "countdown_target": "",
+    "auto_restart": false,
+    "on_zero": "none",
+    "format": "%H:%M:%S",
+    "topmost": true,
+    "x": 0,
+    "y": 0,
+    "font_size": 48,
+    "opacity": 0.92
   }
 }

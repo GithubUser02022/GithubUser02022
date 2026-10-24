@@ -52,6 +52,7 @@ import chub_sync as sync_mod
 import chub_tasks as tasks_mod
 import chub_pen as pen_mod
 import chub_zy as zy_mod
+import chub_clock as clock_mod
 
 APP_ID = core.APP_ID
 VERSION = "1.0"
@@ -102,6 +103,7 @@ class App:
         self.protect = None
         self.scheduler = None
         self.overlay = zy_mod.ZyOverlay()
+        self.clock = clock_mod.ClockEngine()
         self.buddy_pid = 0
         self._services_started = False
 
@@ -145,7 +147,12 @@ class App:
             if CFG.get("zy.show_overlay", False):
                 self.overlay.show()
 
-        # ⑧ 云笔助手面板：勾选了才开
+        # ⑧ 计时器：勾选了才显示浮窗
+        if CFG.get("clock.enable", False) and (self.clock is None or not self.clock.is_alive()):
+            self.clock = clock_mod.ClockEngine()
+            self.clock.start()
+
+        # ⑨ 云笔助手面板：勾选了才开
         if CFG.get("pen.enable", False):
             threading.Thread(target=pen_mod.PenPanel.open, daemon=True,
                              name="PenOpen").start()
@@ -162,6 +169,15 @@ class App:
             log("已按新配置刷新服务")
         except Exception:
             log("刷新服务失败：\n" + traceback.format_exc())
+
+    def on_clock_restart(self):
+        """重新开始计时"""
+        try:
+            if getattr(self, "clock", None):
+                self.clock.overlay.restart()
+                log("计时器已重新开始")
+        except Exception:
+            pass
 
     def task_items(self):
         """定时任务列表（配置 → 对象），带简单缓存，避免每轮重建丢状态"""
@@ -537,6 +553,11 @@ class App:
         try:
             if self.protect:
                 self.protect.shutdown()
+        except Exception:
+            pass
+        try:
+            if getattr(self, "clock", None):
+                self.clock.stop()
         except Exception:
             pass
         try:
