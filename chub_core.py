@@ -56,9 +56,10 @@ except Exception:
 
 
 APP_ID = "ClassHub"
+APP_CONTRIBUTORS = ["GithubUser02022", "HappyCode"]
 APP_NAME_CN = "课堂助手套件"
-APP_VERSION = "1.5.0"
-APP_RELEASE_DATE = "2026-10-21"
+APP_VERSION = "1.6.1"
+APP_RELEASE_DATE = "2026-10-22"
 APP_AUTHOR = "Hy4 preview"
 
 # ---- 界面主题（个性化页可调，只对设置窗口本身生效）----
@@ -69,6 +70,8 @@ SHELL_THEME = {
     "radius": 18.0,        # 窗口圆角半径（像素，按 DPI 缩放）
     "style": "auto",       # auto=跟随系统 / light=浅色 / dark=深色
     "ui_scale": 0.0,      # 界面缩放，0=自动（按屏幕和 DPI 算）；手动就填 0.5~3.0
+    "page_bg": "",        # 页面背景色（留空=跟随明暗主题），如 #101014 / rgb(20,20,26)
+    "page_fg": "",        # 页面文字色（留空=跟随明暗主题）
     "backdrop": "mica",   # 背景材质：mica 云母（任务管理器用的）/ acrylic / none / auto
 }
 IS_WINDOWS = os.name == "nt"
@@ -262,6 +265,23 @@ DEFAULT_CONFIG: dict = {
     },
 
     # ---- 云笔助手面板（自绘窗口，仿中育云笔助手连接界面）----
+    # ⑧ 计时器：正计时 / 倒计时，精确到秒
+    "clock": {
+        "enable": False,          # 总开关，默认关
+        "mode": "stopwatch",      # stopwatch 正计时 / countdown 倒计时
+        "show_seconds": True,     # 精确到秒
+        "countdown_seconds": 3600.0,  # 倒计时时长（秒），countdown 模式用
+        "countdown_target": "",   # 或指定时刻（如 18:30 / 2026-10-22 18:30），留空用上面时长
+        "auto_restart": False,    # 倒计时归零后自动重新开始
+        "on_zero": "none",        # 归零动作：none / message / shutdown / lock
+        "format": "%H:%M:%S",     # 显示格式
+        "topmost": True,          # 浮窗置顶
+        "x": 0,                   # 浮窗位置（0=屏幕右下角）
+        "y": 0,
+        "font_size": 48,          # 字号
+        "opacity": 0.92,          # 不透明度
+    },
+
     "pen": {
         "enable": False,          # 总开关，默认关：不勾就完全不动
         "auto_start_zy": True,    # 打开面板时，中育没在跑就先启动它

@@ -32,20 +32,39 @@ if "%MODE%"=="1" (
 )
 
 if errorlevel 1 (
+    echo.
     echo 打包失败，看上面的报错。
-) else (
     echo.
-    echo 好了！
-    if "%MODE%"=="1" (
-        echo   单文件版：dist\ClassHub.exe
-        echo   拷走时只拷这一个 exe 就行。
-    ) else (
-        echo   文件夹版：dist\ClassHub\ClassHub.exe
-        echo   拷走时把整个 ClassHub 文件夹一起拷，少一个文件都跑不起来。
-    )
-    echo.
-    echo 配置和日志会生成在 exe 的同一个文件夹里（config.json / sync.log）。
-    if "%MODE%"=="2" start "" explorer "%~dp0dist"
+    pause
+    exit /b 1
 )
+
+echo.
+echo ============================================
+echo 复制源码到 dist（这样设置里的"源码"页才有东西可看）
+echo ============================================
+set "SRCDIR=dist\源码"
+if "%MODE%"=="2" set "SRCDIR=dist\ClassHub\源码"
+if not exist "%SRCDIR%" mkdir "%SRCDIR%"
+copy /y *.py "%SRCDIR%\" >nul
+copy /y 使用说明.md "%SRCDIR%\" >nul
+copy /y requirements.txt "%SRCDIR%\" >nul
+echo   已复制到 %SRCDIR%\
+echo   共复制 %CD% 下的 .py / .md / .txt
+echo.
+echo 好了！
+if "%MODE%"=="1" (
+    echo   单文件版：dist\ClassHub.exe
+    echo   拷走时只拷这一个 exe 就行。
+    echo   源码目录：dist\源码\
+) else (
+    echo   文件夹版：dist\ClassHub\ClassHub.exe
+    echo   拷走时把整个 ClassHub 文件夹一起拷，少一个文件都跑不起来。
+    echo   源码目录：dist\ClassHub\源码\
+)
+echo.
+echo 配置和日志会生成在 exe 的同一个文件夹里（config.json / sync.log）。
+echo 源码在「源码」子文件夹里，设置窗口 -^> 帮助 -^> 源码 可以直接看。
+if "%MODE%"=="2" start "" explorer "%~dp0dist"
 echo.
 pause
